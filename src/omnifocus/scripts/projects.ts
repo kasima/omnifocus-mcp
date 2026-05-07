@@ -237,18 +237,19 @@ export const UPDATE_PROJECT_SCRIPT = `
     }
     
     if (updates.status) {
+      // OmniFocus JXA quirks: active/onHold accept string assignment,
+      // but dropped/done must go through verbs (the app refuses direct status=).
       if (updates.status === 'active') {
-        targetProject.status = app.Project.Status.active;
+        targetProject.status = 'active status';
         changes.push("Status set to active");
       } else if (updates.status === 'onHold') {
-        targetProject.status = app.Project.Status.onHold;
+        targetProject.status = 'on hold status';
         changes.push("Status set to on hold");
       } else if (updates.status === 'dropped') {
-        targetProject.status = app.Project.Status.dropped;
+        targetProject.markDropped();
         changes.push("Status set to dropped");
       } else if (updates.status === 'done') {
-        targetProject.status = app.Project.Status.done;
-        targetProject.completionDate = new Date();
+        targetProject.markComplete();
         changes.push("Project completed");
       }
     }
@@ -357,9 +358,9 @@ export const COMPLETE_PROJECT_SCRIPT = `
       }
     }
     
-    // Complete the project
-    targetProject.status = app.Project.Status.done;
-    targetProject.completionDate = new Date();
+    // Complete the project (OmniFocus requires the markComplete verb;
+    // direct status assignment is rejected).
+    targetProject.markComplete();
     
     return JSON.stringify({
       success: true,
@@ -412,15 +413,15 @@ export const DELETE_PROJECT_SCRIPT = `
     
     // Delete or orphan tasks
     if (deleteTasks && taskCount > 0) {
-      // Delete all tasks in the project
+      // Delete all tasks in the project (JXA: app.delete, not .remove())
       for (let i = tasks.length - 1; i >= 0; i--) {
-        tasks[i].remove();
+        app.delete(tasks[i]);
         deletedTaskCount++;
       }
     }
-    
-    // Delete the project
-    targetProject.remove();
+
+    // Delete the project (JXA: app.delete, not .remove())
+    app.delete(targetProject);
     
     return JSON.stringify({
       success: true,
