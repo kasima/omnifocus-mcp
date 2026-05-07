@@ -107,6 +107,58 @@ Add to your Claude Desktop configuration file (`~/Library/Application Support/Cl
 ### Environment Variables
 
 - `LOG_LEVEL` - Set logging level: `error`, `warn`, `info`, `debug` (default: `info`)
+- `MCP_TRANSPORT` - `stdio` (default) or `http` to expose the server over HTTP
+- `MCP_HTTP_PORT` - Port for the HTTP transport (default: `3000`)
+- `MCP_BIND` - Interface to bind on (default: `0.0.0.0`; use `127.0.0.1` for local-only)
+- `MCP_HTTP_PATH` - Endpoint path (default: `/mcp`)
+- `MCP_AUTH_TOKEN` - Required bearer token for HTTP requests. Required when binding on a non-loopback address.
+
+### Remote Access (HTTP transport)
+
+The server can expose its tools over the [MCP Streamable HTTP transport](https://modelcontextprotocol.io/specification/2024-11-05/basic/transports#streamable-http) so clients on other hosts can reach it. OmniFocus must still be running on the same Mac as the server — only the client moves.
+
+Recommended setup: put the Mac on a private network (Tailscale, ZeroTier, or just LAN), then run the server with a bearer token:
+
+```bash
+MCP_TRANSPORT=http \
+MCP_HTTP_PORT=3000 \
+MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
+node /path/to/omnifocus-mcp/dist/index.js
+```
+
+The server prints the chosen URL on startup. Smoke-test from any host on the network:
+
+```bash
+curl -X POST http://<mac-host>:3000/mcp \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  --data '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+To use it from Claude Desktop on another machine, point the config at the URL via [`mcp-remote`](https://github.com/geelen/mcp-remote):
+
+```json
+{
+  "mcpServers": {
+    "omnifocus": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://<mac-host>:3000/mcp",
+        "--header",
+        "Authorization: Bearer <your-token>"
+      ]
+    }
+  }
+}
+```
+
+Notes:
+- Stateless mode is used, so progress notifications and server-initiated SSE streams are not available. Tool calls work normally.
+- The endpoint refuses to start on a non-loopback bind without `MCP_AUTH_TOKEN`.
+- A `GET /healthz` endpoint is exposed (unauthenticated) for liveness checks.
 
 ## Usage Examples
 

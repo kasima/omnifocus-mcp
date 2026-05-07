@@ -1,34 +1,25 @@
 #!/usr/bin/env node
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { registerTools } from './tools/index.js';
 import { CacheManager } from './cache/CacheManager.js';
 import { PermissionChecker } from './utils/permissions.js';
 import { createLogger } from './utils/logger.js';
+import { createMcpServer } from './server-factory.js';
+import { startHttpServer } from './http-server.js';
 
 const logger = createLogger('server');
 
-// Create server instance
-const server = new Server(
-  {
-    name: 'omnifocus-mcp-cached',
-    version: '1.0.0',
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
-  }
-);
+async function runStdio(cacheManager: CacheManager) {
+  const server = await createMcpServer(cacheManager);
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
 
-// Start server
-async function runServer() {
-  // Initialize cache manager
+async function main() {
   const cacheManager = new CacheManager();
-  
-  // Perform initial permission check (non-blocking)
-  const permissionChecker = PermissionChecker.getInstance();
-  permissionChecker.checkPermissions()
+
+  // Permission check is non-blocking; tools surface errors when invoked without permission.
+  PermissionChecker.getInstance()
+    .checkPermissions()
     .then(result => {
       if (!result.hasPermission) {
         logger.warn('OmniFocus permissions not granted. Tools will provide instructions when used.');
@@ -42,15 +33,18 @@ async function runServer() {
     .catch(error => {
       logger.error('Failed to check permissions:', error);
     });
-  
-  // Register all tools AFTER server creation but BEFORE connection
-  await registerTools(server, cacheManager);
-  
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+
+  const transport = (process.env.MCP_TRANSPORT ?? 'stdio').toLowerCase();
+  if (transport === 'http') {
+    await startHttpServer(cacheManager);
+  } else if (transport === 'stdio') {
+    await runStdio(cacheManager);
+  } else {
+    throw new Error(`Unknown MCP_TRANSPORT: ${transport}. Expected "stdio" or "http".`);
+  }
 }
 
-runServer().catch((error) => {
+main().catch((error) => {
   console.error('Server startup error:', error);
   process.exit(1);
 });
