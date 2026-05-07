@@ -219,8 +219,8 @@ export const MANAGE_TAGS_SCRIPT = `
           } catch (e) {}
         }
         
-        // Remove the tag
-        tagToDelete.remove();
+        // Remove the tag (JXA: app.delete works on tags like tasks)
+        app.delete(tagToDelete);
         
         return JSON.stringify({
           success: true,
@@ -292,8 +292,8 @@ export const MANAGE_TAGS_SCRIPT = `
           } catch (e) {}
         }
         
-        // Delete the source tag
-        sourceTag.remove();
+        // Delete the source tag (JXA: app.delete works on tags like tasks)
+        app.delete(sourceTag);
         
         return JSON.stringify({
           success: true,
